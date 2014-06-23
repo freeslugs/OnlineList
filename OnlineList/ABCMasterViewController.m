@@ -10,8 +10,9 @@
 
 #import "ABCDetailViewController.h"
 
-@interface ABCMasterViewController () {
+@interface ABCMasterViewController () <NSURLConnectionDataDelegate> {
     NSMutableArray *_objects;
+    NSMutableData *_incomingData;
 }
 @end
 
@@ -29,10 +30,18 @@
 - (void)viewDidLoad
 {
     [super viewDidLoad];
+    
+    if (!_objects) {
+        _objects = [NSMutableArray new];
+    }
+    
+    [_objects addObject:@"Alex"];
+    [_objects addObject:@"Gilad"];
+    
 	// Do any additional setup after loading the view, typically from a nib.
     self.navigationItem.leftBarButtonItem = self.editButtonItem;
 
-    UIBarButtonItem *addButton = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemAdd target:self action:@selector(insertNewObject:)];
+    UIBarButtonItem *addButton = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemRefresh target:self action:@selector(refreshObjects:)];
     self.navigationItem.rightBarButtonItem = addButton;
     self.detailViewController = (ABCDetailViewController *)[[self.splitViewController.viewControllers lastObject] topViewController];
 }
@@ -43,14 +52,13 @@
     // Dispose of any resources that can be recreated.
 }
 
-- (void)insertNewObject:(id)sender
+- (void)refreshObjects:(id)sender
 {
-    if (!_objects) {
-        _objects = [[NSMutableArray alloc] init];
-    }
-    [_objects insertObject:[NSDate date] atIndex:0];
-    NSIndexPath *indexPath = [NSIndexPath indexPathForRow:0 inSection:0];
-    [self.tableView insertRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationAutomatic];
+    NSURL *url = [NSURL URLWithString:@"http://httpbin.org/get"];
+    NSURLRequest *request = [[NSURLRequest alloc] initWithURL:url];
+    NSURLConnection *connection = [[NSURLConnection alloc] initWithRequest:request delegate:self];
+    
+    [connection start];
 }
 
 #pragma mark - Table View
@@ -68,9 +76,10 @@
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath
 {
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"Cell" forIndexPath:indexPath];
+    cell.backgroundColor = [UIColor colorWithRed:152.0/255.0 green:251.0/255.0 blue:152.0/255.0 alpha:1.0];
 
-    NSDate *object = _objects[indexPath.row];
-    cell.textLabel.text = [object description];
+    NSString *object = _objects[indexPath.row];
+    cell.textLabel.text = object;
     return cell;
 }
 
@@ -121,6 +130,30 @@
         NSDate *object = _objects[indexPath.row];
         [[segue destinationViewController] setDetailItem:object];
     }
+}
+
+- (void)connection:(NSURLConnection *)connection didFailWithError:(NSError *)error {
+    NSLog(@"connection failed: %@", error);
+}
+
+- (void)connection:(NSURLConnection *)connection didReceiveResponse:(NSURLResponse *)response {
+    _incomingData = [NSMutableData new];
+}
+
+- (void)connection:(NSURLConnection *)connection didReceiveData:(NSData *)data {
+    [_incomingData appendData:data];
+}
+
+- (void)connectionDidFinishLoading:(NSURLConnection *)connection {
+    id json = [NSJSONSerialization JSONObjectWithData:_incomingData options:0 error:nil];
+    
+    NSDictionary *dict = (NSDictionary *) json;
+    
+    for (NSString *key in dict.allKeys) {
+        [_objects addObject:key];
+    }
+    
+    [self.tableView reloadData];
 }
 
 @end
